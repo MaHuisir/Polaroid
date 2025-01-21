@@ -14,6 +14,7 @@
             height: 100vh;
             margin: 0;
             flex-direction: column;
+            transition: background-color 0.3s;
         }
 
         .upload-container {
@@ -64,7 +65,7 @@
             text-align: center;
             font-size: 14px;
             color: #333;
-            border-radius: 10px;
+            /* border-radius: 10px; */
         }
 
         .polaroid img {
@@ -72,7 +73,7 @@
             height: auto;
             border-bottom: 1px solid #ddd;
             margin-bottom: 10px;
-            border-radius: 5px;
+            /* border-radius: 5px; */
         }
 
         .exif-info {
@@ -110,7 +111,7 @@
             display: block;
         }
 
-        input[type="checkbox"] {
+        input[type="checkbox"], input[type="color"] {
             margin-right: 5px;
         }
     </style>
@@ -123,6 +124,9 @@
         <button class="button" onclick="downloadImage()">下载效果图</button>
         <label>
             <input type="checkbox" id="showInfo" checked> 显示照片信息
+        </label>
+        <label>
+            背景颜色: <input type="color" id="bgColorPicker" value="#e0f7fa">
         </label>
         <div class="loading" id="loading">上传中...</div>
         <div class="error" id="error"></div>
@@ -139,11 +143,14 @@
         const loading = document.getElementById('loading');
         const error = document.getElementById('error');
         const showInfoCheckbox = document.getElementById('showInfo');
+        const bgColorPicker = document.getElementById('bgColorPicker');
         let currentImage = null;
         let originalFileName = '';
         let originalImageURL = '';
 
         fileInput.addEventListener('change', handleFiles);
+        showInfoCheckbox.addEventListener('change', togglePhotoInfo);
+        bgColorPicker.addEventListener('input', changeBackgroundColor);
 
         function handleFiles(event) {
             const files = event.target.files;
@@ -188,7 +195,7 @@
 
                     // 读取EXIF信息
                     EXIF.getData(file, function() {
-                        const cameraModel = EXIF.getTag(this, 'Model') || 'Nikon';
+                        const cameraModel = EXIF.getTag(this, 'Model') || '未知相机';
                         const aperture = EXIF.getTag(this, 'FNumber');
                         const shutterSpeed = EXIF.getTag(this, 'ExposureTime');
                         const iso = EXIF.getTag(this, 'ISOSpeedRatings');
@@ -207,6 +214,8 @@
                     polaroid.appendChild(img);
                     polaroid.appendChild(exifInfo);
                     previewArea.appendChild(polaroid);
+
+                    togglePhotoInfo(); // 初始化时根据复选框状态显示信息
                 };
 
                 img.onerror = function() {
@@ -214,6 +223,17 @@
                     error.textContent = '图片加载失败，请重试。';
                 };
             }
+        }
+
+        function togglePhotoInfo() {
+            const exifInfos = document.querySelectorAll('.exif-info');
+            exifInfos.forEach(info => {
+                info.style.display = showInfoCheckbox.checked ? 'flex' : 'none';
+            });
+        }
+
+        function changeBackgroundColor() {
+            document.body.style.backgroundColor = bgColorPicker.value;
         }
 
         function downloadImage() {
@@ -255,7 +275,7 @@
 
                 const link = document.createElement('a');
                 link.download = `${originalFileName}-副本.png`;
-                link.href = canvas.toDataURL('image/png', 1.0); // 确保图像质量为高清
+                link.href = canvas.toDataURL('image/png', 0.8); // 确保图像质量为高清
                 link.click();
             };
 
