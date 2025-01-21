@@ -1,0 +1,268 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>拍立得风格图片预览</title>
+    <style>
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background-color: #e0f7fa;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            flex-direction: column;
+        }
+
+        .upload-container {
+            text-align: center;
+            margin-bottom: 20px;
+            background-color: #ffffff;
+            padding: 20px;
+            border-radius: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.1);
+        }
+
+        .button {
+            background-color: #00796b;
+            color: white;
+            padding: 12px 24px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            margin: 10px;
+            transition: background-color 0.3s, transform 0.3s;
+        }
+
+        .button:hover {
+            background-color: #004d40;
+            transform: translateY(-2px);
+        }
+
+        .loading {
+            display: none;
+            font-size: 14px;
+            color: #666;
+        }
+
+        .error {
+            color: red;
+            font-size: 14px;
+            margin-top: 10px;
+        }
+
+        .polaroid {
+            position: relative;
+            width: 320px;
+            background: white;
+            padding: 10px;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            margin: 10px;
+            text-align: center;
+            font-size: 14px;
+            color: #333;
+            border-radius: 10px;
+        }
+
+        .polaroid img {
+            width: 100%;
+            height: auto;
+            border-bottom: 1px solid #ddd;
+            margin-bottom: 10px;
+            border-radius: 5px;
+        }
+
+        .exif-info {
+            display: flex;
+            justify-content: space-between;
+            padding: 5px;
+            font-size: 12px;
+        }
+
+        .camera-info {
+            font-weight: bold;
+            font-style: italic;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .settings-info {
+            margin-top: 5px;
+        }
+
+        .settings-info span {
+            cursor: pointer;
+        }
+
+        .notice {
+            font-size: 14px;
+            color: #00796b;
+            margin-bottom: 20px;
+        }
+
+        label {
+            font-size: 14px;
+            color: #00796b;
+            margin-top: 10px;
+            display: block;
+        }
+
+        input[type="checkbox"] {
+            margin-right: 5px;
+        }
+    </style>
+</head>
+<body>
+    <div class="notice">提示：用户可自行修改光圈、快门等信息！</div>
+    <div class="upload-container">
+        <input type="file" id="fileInput" accept="image/*" style="display: none;">
+        <button class="button" onclick="document.getElementById('fileInput').click()">选择图片上传</button>
+        <button class="button" onclick="downloadImage()">下载效果图</button>
+        <label>
+            <input type="checkbox" id="showInfo" checked> 显示照片信息
+        </label>
+        <div class="loading" id="loading">上传中...</div>
+        <div class="error" id="error"></div>
+    </div>
+
+    <div id="previewArea"></div>
+    <canvas id="canvas" style="display:none;"></canvas>
+
+    <script src="https://cdn.jsdelivr.net/npm/exif-js"></script>
+    <script>
+        const fileInput = document.getElementById('fileInput');
+        const previewArea = document.getElementById('previewArea');
+        const canvas = document.getElementById('canvas');
+        const loading = document.getElementById('loading');
+        const error = document.getElementById('error');
+        const showInfoCheckbox = document.getElementById('showInfo');
+        let currentImage = null;
+        let originalFileName = '';
+        let originalImageURL = '';
+
+        fileInput.addEventListener('change', handleFiles);
+
+        function handleFiles(event) {
+            const files = event.target.files;
+            previewArea.innerHTML = ''; // 清空之前的预览
+            error.textContent = ''; // 清空错误信息
+
+            if (files.length === 0) {
+                error.textContent = '请选择一个图片文件。';
+                return;
+            }
+
+            loading.style.display = 'block';
+
+            for (let file of files) {
+                if (!file.type.startsWith('image/')) {
+                    error.textContent = '文件格式不支持，请上传图片文件。';
+                    loading.style.display = 'none';
+                    return;
+                }
+
+                originalFileName = file.name.split('.').slice(0, -1).join('.'); // 获取原文件名
+                originalImageURL = URL.createObjectURL(file); // 获取原始图像的URL
+
+                const img = new Image();
+                img.src = originalImageURL;
+
+                img.onload = function() {
+                    loading.style.display = 'none';
+                    currentImage = img;
+                    const polaroid = document.createElement('div');
+                    polaroid.className = 'polaroid';
+
+                    const exifInfo = document.createElement('div');
+                    exifInfo.className = 'exif-info';
+
+                    const cameraInfo = document.createElement('div');
+                    cameraInfo.className = 'camera-info';
+                    cameraInfo.contentEditable = true;
+
+                    const settingsInfo = document.createElement('div');
+                    settingsInfo.className = 'settings-info';
+
+                    // 读取EXIF信息
+                    EXIF.getData(file, function() {
+                        const cameraModel = EXIF.getTag(this, 'Model') || 'Nikon';
+                        const aperture = EXIF.getTag(this, 'FNumber');
+                        const shutterSpeed = EXIF.getTag(this, 'ExposureTime');
+                        const iso = EXIF.getTag(this, 'ISOSpeedRatings');
+
+                        cameraInfo.textContent = cameraModel;
+
+                        settingsInfo.innerHTML = `
+                            <span contentEditable="true">${aperture ? `f/${aperture}` : '未知'}</span>
+                            <span contentEditable="true">${shutterSpeed ? `1/${Math.round(1/shutterSpeed)}s` : '未知'}</span>
+                            <span contentEditable="true">${iso || '未知'}</span>
+                        `;
+                    });
+
+                    exifInfo.appendChild(cameraInfo);
+                    exifInfo.appendChild(settingsInfo);
+                    polaroid.appendChild(img);
+                    polaroid.appendChild(exifInfo);
+                    previewArea.appendChild(polaroid);
+                };
+
+                img.onerror = function() {
+                    loading.style.display = 'none';
+                    error.textContent = '图片加载失败，请重试。';
+                };
+            }
+        }
+
+        function downloadImage() {
+            if (!originalImageURL) return;
+
+            const img = new Image();
+            img.src = originalImageURL;
+
+            img.onload = function() {
+                const ctx = canvas.getContext('2d');
+                const borderWidth = img.width * 0.03; // 边框宽度为图像宽度的3%
+                const padding = img.height * 0.08; // 底部边距为图像高度的8%
+                canvas.width = img.width + borderWidth * 2;
+                canvas.height = img.height + padding + borderWidth * 2;
+
+                ctx.fillStyle = '#fff';
+                ctx.fillRect(0, 0, canvas.width, canvas.height);
+                ctx.drawImage(img, borderWidth, borderWidth, img.width, img.height);
+
+                if (showInfoCheckbox.checked) {
+                    const cameraModel = document.querySelector('.camera-info').textContent;
+                    const settings = document.querySelectorAll('.settings-info span');
+                    const aperture = settings[0].textContent;
+                    const shutterSpeed = settings[1].textContent;
+                    const iso = settings[2].textContent;
+
+                    ctx.fillStyle = '#333';
+                    ctx.font = `bold italic ${img.height * 0.05}px Arial`; // 增大字体大小
+                    const textY = img.height + borderWidth + padding; // 垂直居中
+                    ctx.fillText(cameraModel, borderWidth + (img.width * 0.02), textY);
+
+                    ctx.font = `${img.height * 0.04}px Arial`; // 增大字体大小
+                    const textWidth = ctx.measureText(`${aperture} ${shutterSpeed} ISO ${iso}`).width;
+                    const startX = canvas.width - textWidth - borderWidth - (img.width * 0.1); // 右对齐
+                    ctx.fillText(aperture, startX + (img.width * 0.1), textY);
+                    ctx.fillText(shutterSpeed, startX + (img.width * 0.17), textY);
+                    ctx.fillText(iso, startX + (img.width * 0.30), textY);
+                }
+
+                const link = document.createElement('a');
+                link.download = `${originalFileName}-副本.png`;
+                link.href = canvas.toDataURL('image/png', 1.0); // 确保图像质量为高清
+                link.click();
+            };
+
+            img.onerror = function() {
+                error.textContent = '下载图片失败，请重试。';
+            };
+        }
+    </script>
+</body>
+</html>
